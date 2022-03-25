@@ -1,0 +1,123 @@
+---
+title: "MIDI"
+author: "Dimitri von Benckendorff"
+date: "3/23/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# install.packages("tuneR")
+library(tuneR)
+library(tidyverse)
+```
+
+```{r}
+path <- "MIDI/ItAintMe.mid"
+snap1 <- readMidi(file=path)
+```
+
+```{r}
+glimpse(snap1)
+summary(snap1)
+unique(snap1$parameterMetaSystem)
+unique(snap1$track)
+```
+
+```{r}
+snap2 <- getMidiNotes(snap1)
+glimpse(snap2)
+```
+
+```{r ItAintMe}
+snap2$track <- snap2$track %>% as.character()
+snap2$track <- ifelse(snap2$track %in% c("3","4","5","6"),
+               ifelse(snap2$track == "3", "Lead",
+               ifelse(snap2$track == "4", "Voice",
+               ifelse(snap2$track == "5", "Bass",
+               ifelse(snap2$track == "6", "Drums", NA)
+               )
+               )
+               )
+               , NA)
+unique(snap2$track)
+```
+
+```{r rad.chart comet effect}
+snap2$amplitude <- c(rep(2,nrow(snap2)))
+summary(snap2$length)
+# minimal length 24.0 and maximal length 48.0
+pl <- function (data, threshold = 24) {data %>% filter(length>threshold) %>% mutate(length = length - threshold, time = time + threshold, amplitude = amplitude*(99/100))}
+l1 <- pl(data.frame(snap2))
+l2 <- l1 %>% pl()
+snap2 <- rbind(snap2,l1,l2)
+
+snap_new <- snap2 %>% mutate(time = time + max(time))
+snap2 <- rbind(snap2,snap_new)
+snap_new <- snap2 %>% mutate(time = time + max(time))
+snap2 <- rbind(snap2,snap_new)
+```
+
+```{r}
+iam <- snap2 %>%
+  filter(track %in% c("Lead", "Voice", "Bass", "Drums")) %>%
+  mutate(Instruments = factor(track, levels = c("Drums", "Bass", "Voice", "Lead")))
+```
+
+```{r scatter plot}
+iam %>% ggplot(aes(x=time, y=note, color=Instruments)) +
+  geom_point(size=iam$amplitude) +
+  labs(title = paste("Scatter plot"))
+```
+
+```{r}
+offset = (snap2$note - 20)
+snap2$angle.c = (snap2$time * 6 / max(snap2$time)) + (max(snap2$note)) # ranging from 0. to 6
+snap2$x.c = -cos(snap2$angle.c + (2/24)*pi) * offset
+snap2$y.c = sin(snap2$angle.c + (2/24)*pi) * offset
+```
+
+```{r rad.chart comet effect vis}
+iam %>%
+  ggplot(aes(x=x.c, y=y.c, color=Instruments), width = 500, height = 500) +
+  theme_void() + 
+  theme(legend.position = c(0.1, 0.85)) + 
+  geom_hline(yintercept=0, color="grey", size = 0.5) +
+  geom_vline(xintercept=0, color="grey", size = 0.5) +
+  geom_segment(aes(x = 0, y = 0, xend = -50, yend = 0),
+               size = 1.25,
+               color = "black",
+               lineend = "round",
+               linejoin = "round",
+               arrow = arrow(length = unit(0.4, "cm"))) +
+  geom_curve(aes(x = -8, y = 0, xend = 8, yend = 0),
+             size = 1.25,
+             color = "black",
+             lineend = "round",
+             linejoin = "round",
+             curvature = -1) +
+  geom_curve(aes(x = 8, y = 0, xend = -8, yend = 0),
+             size = 1.25,
+             color = "black",
+             lineend = "round",
+             linejoin = "round",
+             curvature = -1,
+             arrow = arrow(length = unit(0.4, "cm"))) +
+  annotate("text", x=-25, y=2, label = "note level", size = 3) +
+  annotate("text", x=0, y=4, label = "time", size = 3) +
+  geom_point(size=snap2$amplitude) + 
+  scale_colour_viridis_d("Instruments")
+```
+
+```{r}
+write.table(snap2,"ItAintMe.txt",sep="\t",row.names=FALSE)
+```
+
+
+
+
+
+

@@ -1,0 +1,214 @@
+---
+title: "MIDI"
+author: "Dimitri von Benckendorff"
+date: "3/23/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# install.packages("tuneR")
+library(tuneR)
+library(tidyverse)
+```
+
+```{r}
+# path <- "MIDI/IGotAFeeling.mid"
+# path <- "MIDI/WhereIsTheLove.mid"
+# path <- "MIDI/ItAintMe.mid"
+path <- "MIDI/MasQueNada.mid"
+snap1 <- readMidi(file=path)
+```
+
+```{r}
+glimpse(snap1)
+summary(snap1)
+# unique(snap1$parameterMetaSystem)
+# unique(snap1$track)
+```
+
+```{r}
+snap2 <- getMidiNotes(snap1)
+glimpse(snap2)
+```
+
+```{r MasQueNada}
+snap2$track <- snap2$track %>% as.character()
+snap2$track <- ifelse(snap2$track %in% c("2","3","4","5","6","7","8","9","10","11"),
+               ifelse(snap2$track == "2" | snap2$track == "5", "Piano",
+               ifelse(snap2$track == "3", "Percussion",
+               ifelse(snap2$track == "4" | snap2$track == "8" | snap2$track == "9", "Vocals",
+               ifelse(snap2$track == "6" | snap2$track == "7", "Strings",
+               ifelse(snap2$track == "10" | snap2$track == "11", NA
+                     , NA)
+                     )
+                     )
+                     )
+                     )
+                     , NA)
+unique(snap2$track)
+```
+
+After cleaning the data, let us display the data in a regular and radial scatter plot
+
+```{r vis prep}
+mqn <- snap2 %>%
+  filter(track %in% c("Piano","Percussion","Vocals","Strings")) %>%
+  mutate(Instruments = factor(track, levels = c("Vocals", "Strings", "Piano", "Percussion")))
+track.order =  c("Vocals", "Strings", "Piano", "Percussion")
+track.colors =  c("#002776", "#FFDF00", "#009C3B", "#006b3c")
+track.size = c(2, 1.25, 1.25, 1.25)
+```
+
+```{r scatter plot}
+library(ggplot2)
+mqn %>% ggplot(aes(x=time, y=note, color=Instruments)) +
+  geom_point() +
+  scale_color_manual(values=c("#002776", "#FFDF00", "#009C3B", "#006b3c")) +
+  labs(title = paste("Scatter plot"))
+```
+
+Let us try transforming this space to a radial scatter plot
+
+```{r rad.chart prep}
+offset = (snap2$note - 20)
+snap2$angle = snap2$time * 6 / max(snap2$time)
+snap2$x = -cos(snap2$angle + (1/53)*pi) * offset
+snap2$y = sin(snap2$angle + (1/53)*pi) * offset
+glimpse(snap2)
+```
+
+```{r rad.chart vis}
+snap2 %>%
+  mutate(ctrack = factor(track, levels = track.order)) %>% 
+  ggplot(aes(x=x, y=y, color = ctrack)) +
+  geom_point(aes(size=ctrack)) + 
+  scale_color_manual(values = track.colors) + 
+  scale_size_manual(values=track.size) +
+  theme_bw()
+```
+
+Let us also try a comet effect using the length of notes
+```{r rad.chart comet effect}
+snap2$amplitude <- c(rep(1.25,nrow(snap2)))
+# minimal length 8.0 and maximal length 840.0
+pl <- function (data, threshold = 50) {data %>% filter(length>threshold) %>% mutate(length = length - threshold, time = time + threshold, amplitude = amplitude*(99/100))}
+l1 <- pl(data.frame(snap2))
+l2 <- l1 %>% pl()
+l3 <- l2 %>% pl()
+l4 <- l3 %>% pl()
+l5 <- l4 %>% pl()
+l6 <- l5 %>% pl()
+l7 <- l6 %>% pl()
+l8 <- l7 %>% pl()
+l9 <- l8 %>% pl()
+snap2 <- rbind(snap2,l1,l2,l3,l4,l5,l6,l7,l8,l9)
+```
+
+```{r}
+offset = (snap2$note - 20)
+snap2$angle.c = (snap2$time * 6 / max(snap2$time)) + (max(snap2$note)) # ranging from 0. to 6
+snap2$x.c = cos(snap2$angle.c - (1/4)*pi) * offset
+snap2$y.c = -sin(snap2$angle.c - (1/4)*pi) * offset
+```
+
+```{r rad.chart comet effect vis}
+# options(repr.plot.width=10, repr.plot.height=10)
+# limit = c(-75, 75)
+snap2 %>%
+  mutate(Instruments = factor(track, levels = track.order)) %>% 
+  ggplot(aes(x=x.c, y=y.c, color=Instruments), width = 500, height = 500) +
+  theme_void() + 
+  theme(legend.position = c(0.1, 0.9)) + 
+  geom_hline(yintercept=0, color="grey", size = 0.5) +
+  geom_vline(xintercept=0, color="grey", size = 0.5) +
+  # scale_x_continuous(limits = limit) +
+  # scale_y_continuous(limits = limit) +
+  geom_segment(aes(x = 0, y = 0, xend = -50, yend = 0),
+               size = 1.25,
+               color = "black",
+               lineend = "round",
+               linejoin = "round",
+               arrow = arrow(length = unit(0.4, "cm"))) +
+  geom_curve(aes(x = -8, y = 0, xend = 8, yend = 0),
+             size = 1.25,
+             color = "black",
+             lineend = "round",
+             linejoin = "round",
+             curvature = -1) +
+  geom_curve(aes(x = 8, y = 0, xend = -8, yend = 0),
+             size = 1.25,
+             color = "black",
+             lineend = "round",
+             linejoin = "round",
+             curvature = -1,
+             arrow = arrow(length = unit(0.4, "cm"))) +
+  annotate("text", x=-25, y=4, label = "note level", size = 3) +
+  annotate("text", x=0, y=4, label = "time", size = 3) +
+  geom_point(size=snap2$amplitude) + 
+  scale_color_manual(values = track.colors)
+```
+
+Finally, let us plot the radial scatter plot with the milky way effect by transforming the angle based on the time and note level.
+
+```{r rad.chart milky way effect}
+offset = (snap2$note - 20)
+snap2$angle.mw = (snap2$time * 6 / max(snap2$time)) + (offset/(1.25*max(snap2$note))) # ranging from 0. to 6
+snap2$x.mw = -cos(snap2$angle.mw - (1/9)*pi) * offset
+snap2$y.mw = sin(snap2$angle.mw - (1/9)*pi) * offset
+glimpse(snap2)
+```
+
+```{r}
+library(ggplot2)
+snap2 <- snap2 %>% filter(track %in% c("Piano","Percussion","Vocals","Strings"))
+track.order =  c("Vocals", "Strings", "Piano", "Percussion")
+track.colors =  c("#002776", "#FFDF00", "#009C3B", "#006b3c")
+track.size = c(2, 1.25, 1.25, 1.25)
+snap2 %>%
+  mutate(ctrack = factor(track, levels = track.order)) %>% 
+  ggplot(aes(x=x.mw, y=y.mw, color = ctrack)) +
+  geom_point(aes(size=ctrack)) + 
+  scale_color_manual(values = track.colors) + 
+  scale_size_manual(values=track.size) +
+  theme_bw()
+```
+
+```{r rad.chart milky way effect}
+offset = (snap2$note - 20)
+snap2$angle.mw = (snap2$time * 6 / max(snap2$time)) + (1.5*offset/max(snap2$note)) # ranging from 0. to 6
+snap2$x.mw = -cos(snap2$angle.mw - (2/10)*pi) * offset
+snap2$y.mw = sin(snap2$angle.mw - (2/10)*pi) * offset
+glimpse(snap2)
+```
+
+```{r}
+library(ggplot2)
+snap2 <- snap2 %>% filter(track %in% c("Piano","Percussion","Vocals","Strings"))
+track.order =  c("Vocals", "Strings", "Piano", "Percussion")
+track.colors =  c("#002776", "#FFDF00", "#009C3B", "#006b3c")
+track.size = c(2, 1.25, 1.25, 1.25)
+snap2 %>%
+  mutate(ctrack = factor(track, levels = track.order)) %>% 
+  ggplot(aes(x=x.mw, y=y.mw, color = ctrack)) +
+  geom_point(aes(size=ctrack)) + 
+  scale_color_manual(values = track.colors) + 
+  scale_size_manual(values=track.size) +
+  theme_bw()
+```
+
+
+
+```{r}
+# write.table(snap1,"WhereIsTheLove1.txt",sep="\t",row.names=FALSE)
+write.table(snap2,"MasQueNada.txt",sep="\t",row.names=FALSE)
+```
+
+
+
+
+
+
